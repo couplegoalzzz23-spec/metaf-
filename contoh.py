@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 from datetime import datetime, timezone
-from streamlit_autorefresh import st_autorefresh
 import re
 import math
 import folium
@@ -26,8 +25,14 @@ with st.sidebar:
     mode = st.radio("Mode", ["OPS", "BRIEFING"])
     tz_mode = st.radio("Zona Waktu", ["UTC", "WIB"])
 
+# =====================================
+# 🔄 NATIVE AUTO REFRESH (SAFE)
+# =====================================
 if auto_refresh:
-    st_autorefresh(interval=refresh_min * 60 * 1000, key="refresh")
+    st.markdown(
+        f"<meta http-equiv='refresh' content='{refresh_min * 60}'>",
+        unsafe_allow_html=True
+    )
 
 # =====================================
 # 🌐 DATA SOURCE
@@ -97,6 +102,7 @@ try:
 
     status, color, warnings = weather_warning(metar)
 
+    # STATUS BAR
     st.markdown(
         f"""
         <div style="padding:12px;border-radius:8px;
@@ -129,7 +135,6 @@ try:
     st.markdown("## 🌬️ Runway Wind Analysis")
 
     wd, ws = extract_wind(metar)
-
     if wd:
         rwy18 = runway_wind(wd, ws, 180)
         rwy36 = runway_wind(wd, ws, 360)
@@ -155,13 +160,14 @@ try:
     with s1:
         st.image(
             "https://rammb-slider.cira.colostate.edu/data/imagery/latest/himawari-9/full_disk/ir/00/000_000.png",
-            caption="Himawari-9 IR (Cloud Top)",
+            caption="Himawari-9 IR – Cloud Top Temperature",
             use_column_width=True
         )
+
     with s2:
         st.image(
             "https://tilecache.rainviewer.com/v2/radar/nowcast.png",
-            caption="Global Rain Radar",
+            caption="Global Rain Radar (RainViewer)",
             use_column_width=True
         )
 
