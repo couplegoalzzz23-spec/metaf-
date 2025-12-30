@@ -5,7 +5,7 @@ import re
 import math
 
 # =====================================
-# ⚙️ PAGE CONFIG
+# PAGE CONFIG
 # =====================================
 st.set_page_config(
     page_title="LANUD RSN Tactical METOC",
@@ -14,17 +14,16 @@ st.set_page_config(
 )
 
 # =====================================
-# 🔁 SIDEBAR CONTROL
+# SIDEBAR
 # =====================================
 with st.sidebar:
-    st.markdown("## ⚙️ OPS CONTROL")
+    st.header("OPS CONTROL")
     refresh_min = st.slider("Auto Refresh (menit)", 1, 30, 5)
     auto_refresh = st.toggle("Auto Refresh", True)
-    mode = st.radio("Mode", ["OPS", "BRIEFING"])
     tz_mode = st.radio("Zona Waktu", ["UTC", "WIB"])
 
 # =====================================
-# 🔄 SAFE AUTO REFRESH (NO MODULE)
+# AUTO REFRESH (NATIVE)
 # =====================================
 if auto_refresh:
     st.markdown(
@@ -33,7 +32,7 @@ if auto_refresh:
     )
 
 # =====================================
-# 🌐 DATA SOURCE
+# DATA SOURCE
 # =====================================
 METAR_URL = "https://aviationweather.gov/api/data/metar"
 
@@ -49,7 +48,7 @@ def fetch_metar_taf():
     return r.text.strip().split("\n")
 
 # =====================================
-# 🧠 PARSING & WARNING
+# WEATHER LOGIC
 # =====================================
 def extract_wind(metar):
     m = re.search(r'(\d{3})(\d{2})KT', metar)
@@ -57,148 +56,103 @@ def extract_wind(metar):
         return int(m.group(1)), int(m.group(2))
     return None, None
 
-def weather_warning(metar):
-    warn = []
+def weather_status(metar):
+    alerts = []
 
     if "TS" in metar or "CB" in metar:
-        warn.append("⛈️ Thunderstorm / CB")
+        alerts.append("⛈️ Thunderstorm / CB")
     if "RA" in metar:
-        warn.append("🌧️ Rain Impact")
+        alerts.append("🌧️ Rain")
     if "FG" in metar or "BR" in metar:
-        warn.append("🌫️ Low Visibility")
+        alerts.append("🌫️ Low Visibility")
 
     _, ws = extract_wind(metar)
     if ws and ws >= 20:
-        warn.append("💨 Strong Wind")
+        alerts.append("💨 Strong Wind")
 
-    if not warn:
+    if not alerts:
         return "🟢 NORMAL", "green", ["No significant weather"]
 
-    level = "🟡 CAUTION" if len(warn) == 1 else "🔴 WARNING"
-    color = "orange" if level == "🟡 CAUTION" else "red"
-    return level, color, warn
+    if len(alerts) == 1:
+        return "🟡 CAUTION", "orange", alerts
+    return "🔴 WARNING", "red", alerts
+
+def runway_component(wd, ws, rwy):
+    angle = math.radians(wd - rwy)
+    return round(ws * math.cos(angle), 1), round(ws * math.sin(angle), 1)
 
 # =====================================
-# ✈️ RUNWAY WIND COMPONENT
-# =====================================
-def runway_wind(wind_dir, wind_spd, rwy_heading):
-    angle = math.radians(wind_dir - rwy_heading)
-    head = round(wind_spd * math.cos(angle), 1)
-    cross = round(wind_spd * math.sin(angle), 1)
-    return head, cross
-
-# =====================================
-# 🧾 MAIN DISPLAY
+# MAIN
 # =====================================
 st.title("✈️ Tactical METOC Dashboard")
 st.subheader("Lanud Roesmin Nurjadin (WIBB)")
 
 try:
-    data = fetch_metar_taf()
-    metar = next(d for d in data if d.startswith("METAR"))
-    taf = next(d for d in data if d.startswith("TAF"))
+    lines = fetch_metar_taf()
+    metar = next(l for l in lines if l.startswith("METAR"))
+    taf = next(l for l in lines if l.startswith("TAF"))
 
-    status, color, warnings = weather_warning(metar)
+    status, color, alerts = weather_status(metar)
 
-    # STATUS BAR
     st.markdown(
         f"""
         <div style="padding:12px;border-radius:8px;
-        background-color:{color};color:white;font-size:18px;font-weight:bold;">
+        background:{color};color:white;font-size:18px;font-weight:bold;">
         FLIGHT STATUS: {status}
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    for w in warnings:
-        st.warning(w)
+    for a in alerts:
+        st.warning(a)
 
     st.divider()
 
-    # METAR / TAF
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 📝 METAR")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("METAR")
         st.code(metar)
-
-    with col2:
-        st.markdown("### 📅 TAF")
+    with c2:
+        st.subheader("TAF")
         st.code(taf)
 
-    # =====================================
-    # 🌬️ WIND ANALYSIS
-    # =====================================
     st.divider()
-    st.markdown("## 🌬️ Runway Wind Analysis")
+    st.subheader("Runway Wind (RWY 18 / 36)")
 
     wd, ws = extract_wind(metar)
     if wd:
-        rwy18 = runway_wind(wd, ws, 180)
-        rwy36 = runway_wind(wd, ws, 360)
+        h18, c18 = runway_component(wd, ws, 180)
+        h36, c36 = runway_component(wd, ws, 360)
 
-        c1, c2 = st.columns(2)
-        with c1:
-            st.metric("RWY 18 Head/Tailwind", f"{rwy18[0]} kt")
-            st.metric("RWY 18 Crosswind", f"{abs(rwy18[1])} kt")
-
-        with c2:
-            st.metric("RWY 36 Head/Tailwind", f"{rwy36[0]} kt")
-            st.metric("RWY 36 Crosswind", f"{abs(rwy36[1])} kt")
+        st.metric("RWY 18 Head/Tail", f"{h18} kt")
+        st.metric("RWY 18 Crosswind", f"{abs(c18)} kt")
+        st.metric("RWY 36 Head/Tail", f"{h36} kt")
+        st.metric("RWY 36 Crosswind", f"{abs(c36)} kt")
     else:
         st.info("Wind data not available")
 
-    # =====================================
-    # 🛰️ SATELLITE & RADAR
-    # =====================================
     st.divider()
-    st.markdown("## 🛰️ Satellite & Radar")
-
-    s1, s2 = st.columns(2)
-    with s1:
-        st.image(
-            "https://rammb-slider.cira.colostate.edu/data/imagery/latest/himawari-9/full_disk/ir/00/000_000.png",
-            caption="Himawari-9 Infrared (Cloud Top Temperature)",
-            use_column_width=True
-        )
-
-    with s2:
-        st.image(
-            "https://tilecache.rainviewer.com/v2/radar/nowcast.png",
-            caption="Global Rain Radar (RainViewer)",
-            use_column_width=True
-        )
-
-    # =====================================
-    # 🗺️ TACTICAL LOCATION (STATIC MAP)
-    # =====================================
-    st.divider()
-    st.markdown("## 🗺️ Tactical Location")
+    st.subheader("Satellite & Radar")
 
     st.image(
-        "https://maps.googleapis.com/maps/api/staticmap"
-        "?center=0.460,101.444"
-        "&zoom=8&size=640x400&maptype=satellite"
-        "&markers=color:red%7Clabel:RSN%7C0.460,101.444",
-        caption="Lanud Roesmin Nurjadin – Radius Awareness ±50 NM",
+        "https://rammb-slider.cira.colostate.edu/data/imagery/latest/"
+        "himawari-9/full_disk/ir/00/000_000.png",
+        caption="Himawari-9 Infrared",
         use_column_width=True
     )
 
-    # =====================================
-    # 🕒 TIME
-    # =====================================
-    now_utc = datetime.now(timezone.utc)
-    if tz_mode == "WIB":
-        now = now_utc.replace(hour=(now_utc.hour + 7) % 24)
-        tz = "WIB"
-    else:
-        now = now_utc
-        tz = "UTC"
-
-    st.caption(
-        f"🕒 Last Update: {now.strftime('%Y-%m-%d %H:%M:%S')} {tz} | "
-        f"Mode: {mode} | Refresh: {refresh_min} min"
+    st.image(
+        "https://tilecache.rainviewer.com/v2/radar/nowcast.png",
+        caption="Global Rain Radar",
+        use_column_width=True
     )
 
+    now = datetime.now(timezone.utc)
+    if tz_mode == "WIB":
+        now = now.replace(hour=(now.hour + 7) % 24)
+
+    st.caption(f"Last update: {now.strftime('%Y-%m-%d %H:%M:%S')} {tz_mode}")
+
 except Exception as e:
-    st.error(f"❌ Error fetching weather data: {e}")
+    st.error(f"ERROR: {e}")
