@@ -3,8 +3,6 @@ import requests
 from datetime import datetime, timezone
 import re
 import math
-import folium
-from streamlit_folium import st_folium
 
 # =====================================
 # ⚙️ PAGE CONFIG
@@ -26,7 +24,7 @@ with st.sidebar:
     tz_mode = st.radio("Zona Waktu", ["UTC", "WIB"])
 
 # =====================================
-# 🔄 NATIVE AUTO REFRESH (SAFE)
+# 🔄 SAFE AUTO REFRESH (NO MODULE)
 # =====================================
 if auto_refresh:
     st.markdown(
@@ -160,7 +158,7 @@ try:
     with s1:
         st.image(
             "https://rammb-slider.cira.colostate.edu/data/imagery/latest/himawari-9/full_disk/ir/00/000_000.png",
-            caption="Himawari-9 IR – Cloud Top Temperature",
+            caption="Himawari-9 Infrared (Cloud Top Temperature)",
             use_column_width=True
         )
 
@@ -172,36 +170,26 @@ try:
         )
 
     # =====================================
-    # 🗺️ TACTICAL MAP
+    # 🗺️ TACTICAL LOCATION (STATIC MAP)
     # =====================================
     st.divider()
-    st.markdown("## 🗺️ Tactical Area Map (50 NM)")
+    st.markdown("## 🗺️ Tactical Location")
 
-    lanud_lat = 0.460
-    lanud_lon = 101.444
-
-    m = folium.Map(location=[lanud_lat, lanud_lon], zoom_start=8)
-    folium.Marker(
-        [lanud_lat, lanud_lon],
-        popup="Lanud Roesmin Nurjadin",
-        icon=folium.Icon(icon="plane", prefix="fa")
-    ).add_to(m)
-
-    folium.Circle(
-        radius=92600,
-        location=[lanud_lat, lanud_lon],
-        color="blue",
-        fill=False
-    ).add_to(m)
-
-    st_folium(m, use_container_width=True, height=400)
+    st.image(
+        "https://maps.googleapis.com/maps/api/staticmap"
+        "?center=0.460,101.444"
+        "&zoom=8&size=640x400&maptype=satellite"
+        "&markers=color:red%7Clabel:RSN%7C0.460,101.444",
+        caption="Lanud Roesmin Nurjadin – Radius Awareness ±50 NM",
+        use_column_width=True
+    )
 
     # =====================================
     # 🕒 TIME
     # =====================================
     now_utc = datetime.now(timezone.utc)
     if tz_mode == "WIB":
-        now = now_utc.astimezone(timezone.utc).replace(hour=(now_utc.hour + 7) % 24)
+        now = now_utc.replace(hour=(now_utc.hour + 7) % 24)
         tz = "WIB"
     else:
         now = now_utc
