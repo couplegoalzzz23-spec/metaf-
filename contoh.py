@@ -1,56 +1,114 @@
 import streamlit as st
 import requests
-import time
-from datetime import datetime
+from datetime import datetime, timezone
+from streamlit_autorefresh import st_autorefresh
 
-# Konfigurasi Halaman
-st.set_page_config(page_title="WIBB Live Weather", page_icon="✈️", layout="wide")
+# =====================================
+# ⚙️ PAGE CONFIG
+# =====================================
+st.set_page_config(
+    page_title="LANUD RSN Tactical Weather",
+    page_icon="✈️",
+    layout="wide"
+)
 
-def fetch_weather_data():
-    url = "https://aviationweather.gov/api/data/metar?ids=WIBB&hours=0&sep=true&taf=true"
-    try:
-        # Menambahkan parameter acak agar tidak terkena cache browser/server
-        response = requests.get(url, params={'t': time.time()})
-        response.raise_for_status()
-        return response.text
-    except Exception as e:
-        return f"Error: {e}"
+# =====================================
+# 🌐 DATA SOURCE
+# =====================================
+METAR_TAF_URL = "https://aviationweather.gov/api/data/metar"
 
-# --- LOGIKA AUTO REFRESH ---
-# Interval dalam detik (contoh: 300 detik = 5 menit)
-refresh_interval = 300 
+# =====================================
+# 🔁 AUTO REFRESH CONTROL
+# =====================================
+with st.sidebar:
+    st.markdown("## ⚙️ Control Panel")
+    refresh_minutes = st.slider("Auto Refresh (menit)", 1, 30, 5)
+    auto_refresh = st.toggle("Auto Refresh", True)
+    timezone_mode = st.radio("Zona Waktu", ["UTC", "WIB"])
 
-def main():
-    st.title("✈️ Real-Time METAR & TAF - WIBB (Pekanbaru)")
-    
-    # Menampilkan indikator update otomatis
-    st.caption(f"Aplikasi akan memperbarui data secara otomatis setiap {refresh_interval/60} menit.")
+if auto_refresh:
+    st_autorefresh(interval=refresh_minutes * 60 * 1000, key="auto_refresh")
 
-    # Ambil data langsung saat aplikasi dijalankan
-    data = fetch_weather_data()
-    
-    if data:
-        parts = data.strip().split('\n')
-        
-        # Layout Kolom
-        col1, col2 = st.columns(2)
+# =====================================
+# 📡 FETCH DATA
+# =====================================
+def fetch_metar_taf():
+    params = {
+        "ids": "WIBB",
+        "hours": 0,
+        "sep": "true",
+        "taf": "true"
+    }
+    r = requests.get(METAR_TAF_URL, params=params, timeout=10)
+    r.raise_for_status()
+    return r.text.strip().split("\n")
 
-        with col1:
-            st.markdown("### 📝 METAR (Observasi)")
-            metar_text = next((s for s in parts if "METAR" in s), "Data METAR tidak ditemukan")
-            st.info(metar_text)
+# =====================================
+# 🧠 FLIGHT CONDITION LOGIC (SIMPLE)
+# =====================================
+def assess_flight_condition(metar):
+    if any(x in metar for x in ["TS", "RA", "FG", "BKN", "OVC"]):
+        return "🔴 IMC / RESTRICTED", "red"
+    if "SCT" in metar:
+        return "🟡 MARGINAL VMC", "orange"
+    return "🟢 VMC / GO", "green"
 
-        with col2:
-            st.markdown("### 📅 TAF (Prakiraan)")
-            taf_text = next((s for s in parts if "TAF" in s), "Data TAF tidak ditemukan")
-            st.warning(taf_text)
-            
-        st.divider()
-        st.write(f"✅ **Update Terakhir:** {datetime.now().strftime('%H:%M:%S')} WIB")
+# =====================================
+# 🧾 MAIN
+# =====================================
+st.title("✈️ Tactical Weather Briefing")
+st.subheader("Lanud Roesmin Nurjadin (WIBB)")
 
-    # Perintah untuk refresh otomatis
-    time.sleep(refresh_interval)
-    st.rerun()
+try:
+    data = fetch_metar_taf()
+    metar = next((d for d in data if d.startswith("METAR")), "METAR tidak tersedia")
+    taf = next((d for d in data if d.startswith("TAF")), "TAF tidak tersedia")
 
-if __name__ == "__main__":
-    main()
+    status, color = assess_flight_condition(metar)
+
+    # ================================
+    # 🚦 STATUS BAR
+    # ================================
+    st.markdown(
+        f"""
+        <div style="padding:10px;border-radius:8px;background-color:{color};color:white;font-weight:bold;">
+        FLIGHT STATUS: {status}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.divider()
+
+    # ================================
+    # 📊 DATA DISPLAY
+    # ================================
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 📝 METAR (Observasi)")
+        st.code(metar, language="text")
+
+    with col2:
+        st.markdown("### 📅 TAF (Forecast)")
+        st.code(taf, language="text")
+
+    # ================================
+    # 🕒 UPDATE TIME
+    # ================================
+    now_utc = datetime.now(timezone.utc)
+    if timezone_mode == "WIB":
+        now = now_utc.astimezone(timezone.utc).replace(hour=(now_utc.hour + 7) % 24)
+        tz_label = "WIB"
+    else:
+        now = now_utc
+        tz_label = "UTC"
+
+    st.divider()
+    st.caption(
+        f"🕒 Last Update: {now.strftime('%Y-%m-%d %H:%M:%S')} {tz_label} | "
+        f"Auto Refresh: {refresh_minutes} menit"
+    )
+
+except Exception as e:
+    st.error(f"❌ Gagal mengambil data cuaca: {e}")
